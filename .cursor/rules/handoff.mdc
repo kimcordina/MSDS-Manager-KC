@@ -1,0 +1,24 @@
+---
+description: Handoff context for MSDS Manager KC — read before continuing work on Windows
+alwaysApply: true
+---
+
+# MSDS Manager KC — session context
+
+Before coding, read **AGENTS.md** at the repo root for full handoff instructions.
+
+## Snapshot
+
+- Windows .NET 8 WPF app + Outlook 2019 COM (not a web add-in)
+- Phases 1–3 already on `main` (library, Outlook match/attach, review dashboard)
+- Built on Mac; **run/test only on Windows**
+- Never send email automatically — propose → approve → attach
+
+## Tomorrow’s default next step
+
+1. `git pull` && `dotnet run --project src\MSDSManager\MSDSManager.csproj`
+2. Point at real OneDrive SDS folder → re-index
+3. Smoke-test library + Outlook flow with a real client email
+4. Fix real-data / COM issues before adding new features
+
+Do not invent a new architecture unless the user asks. Prefer small fixes against live SDS files and Outlook 2019.
