@@ -92,6 +92,7 @@ public sealed class SdsIndexer
 
         _repository.RemoveMissingFiles(files);
         RecalculateStatuses(reviewAfterMonths);
+        LogVersionChanges();
 
         progress?.Report(new IndexProgress
         {
@@ -101,6 +102,29 @@ public sealed class SdsIndexer
         });
 
         return files.Count;
+    }
+
+    private void LogVersionChanges()
+    {
+        var comparer = new VersionCompareService();
+        var summaries = comparer.FindSupersededPairs(_repository.GetAllDocuments());
+        var recentDetails = _repository.GetRecentActivity(200)
+            .Where(a => a.Action == "Version change detected")
+            .Select(a => a.Detail)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var summary in summaries.Take(50))
+        {
+            if (recentDetails.Contains(summary.SummaryText))
+                continue;
+
+            _repository.LogActivity(
+                "Version change detected",
+                summary.SummaryText,
+                summary.Newer.Id,
+                summary.ProductName);
+        }
     }
 
     public void RecalculateStatuses(int reviewAfterMonths)

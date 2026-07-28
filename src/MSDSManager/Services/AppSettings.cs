@@ -26,7 +26,9 @@ public sealed class AppSettings
     public string? LibraryRootPath { get; set; }
     public string? LastExportFolder { get; set; }
     public int ReviewAfterMonths { get; set; } = 36;
+    public int VerificationReminderMonths { get; set; } = 12;
     public string? ReplyTemplate { get; set; }
+    public string? DefaultSupplierEmail { get; set; }
 
 
     public static AppSettings Load()

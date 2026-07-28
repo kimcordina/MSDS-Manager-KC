@@ -484,6 +484,85 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void OpenReviewDashboard()
+    {
+        var vm = new ReviewDashboardViewModel(
+            _repository,
+            _outlook,
+            _settings,
+            onChanged: RefreshDocuments);
+
+        var window = new ReviewDashboardWindow
+        {
+            Owner = Application.Current.MainWindow,
+            DataContext = vm
+        };
+        window.ShowDialog();
+        RefreshDocuments();
+    }
+
+    [RelayCommand]
+    private void MarkSelectedVerified()
+    {
+        if (SelectedDocument is null)
+            return;
+
+        _repository.MarkSupplierVerified(SelectedDocument.Document.Id, DateTime.Today);
+        _repository.LogActivity(
+            "Supplier verified",
+            $"Verified on {DateTime.Today:dd MMM yyyy}",
+            SelectedDocument.Document.Id,
+            SelectedDocument.Document.ProductName);
+        RefreshDocuments();
+        StatusMessage = $"Marked '{SelectedDocument.Document.ProductName}' as supplier-verified today.";
+    }
+
+    [RelayCommand]
+    private void ExportSdsRegister()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "CSV (*.csv)|*.csv",
+            FileName = $"SDS-Register-{DateTime.Now:yyyyMMdd}.csv"
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var path = new RegisterExportService().ExportCsv(_repository.GetAllDocuments(), dialog.FileName);
+        _repository.LogActivity("Exported SDS register", path);
+        StatusMessage = $"Register exported: {path}";
+        MessageBox.Show($"Exported SDS register to:\n{path}", "MSDS Manager KC",
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private void RequestLatestForSelected()
+    {
+        if (SelectedDocument is null)
+            return;
+
+        try
+        {
+            var doc = SelectedDocument.Document;
+            _outlook.CreateNewMailDraft(
+                $"Request for latest SDS — {doc.ProductName}",
+                OutlookComService.BuildSupplierRequestBody(doc),
+                _settings.DefaultSupplierEmail);
+            _repository.LogActivity(
+                "Requested latest SDS",
+                "Outlook draft created",
+                doc.Id,
+                doc.ProductName);
+            StatusMessage = "Outlook draft created for supplier SDS request.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Outlook draft failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private List<SdsDocument> GetSelectedDocuments() =>
         Documents.Where(d => d.IsSelected).Select(d => d.Document).ToList();
 

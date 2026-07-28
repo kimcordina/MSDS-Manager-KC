@@ -71,6 +71,15 @@ public sealed class SdsRepository
             CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
             CREATE INDEX IF NOT EXISTS idx_documents_product ON documents(product_name);
             CREATE INDEX IF NOT EXISTS idx_aliases_alias ON aliases(alias);
+
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT,
+                document_id INTEGER,
+                product_name TEXT
+            );
             """;
         cmd.ExecuteNonQuery();
     }
@@ -381,6 +390,79 @@ public sealed class SdsRepository
         });
         cmd.CommandText = $"SELECT * FROM documents WHERE id IN ({string.Join(",", paramNames)});";
         return ReadDocuments(cmd).ToList();
+    }
+
+    public void MarkSupplierVerified(long documentId, DateTime? verifiedAt = null, string? supplier = null)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            """
+            UPDATE documents
+            SET last_supplier_verified_at = $verified,
+                supplier = COALESCE($supplier, supplier)
+            WHERE id = $id;
+            """;
+        cmd.Parameters.AddWithValue("$verified", (verifiedAt ?? DateTime.Today).ToString("O"));
+        cmd.Parameters.AddWithValue("$supplier", string.IsNullOrWhiteSpace(supplier) ? DBNull.Value : supplier.Trim());
+        cmd.Parameters.AddWithValue("$id", documentId);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void UpdateSupplier(long documentId, string? supplier)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE documents SET supplier = $supplier WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$supplier", string.IsNullOrWhiteSpace(supplier) ? DBNull.Value : supplier.Trim());
+        cmd.Parameters.AddWithValue("$id", documentId);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void LogActivity(string action, string? detail = null, long? documentId = null, string? productName = null)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            """
+            INSERT INTO activity_log (created_at, action, detail, document_id, product_name)
+            VALUES ($created_at, $action, $detail, $document_id, $product_name);
+            """;
+        cmd.Parameters.AddWithValue("$created_at", DateTime.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("$action", action);
+        cmd.Parameters.AddWithValue("$detail", (object?)detail ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$document_id", (object?)documentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$product_name", (object?)productName ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    }
+
+    public IReadOnlyList<ActivityLogEntry> GetRecentActivity(int limit = 100)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            """
+            SELECT id, created_at, action, detail, document_id, product_name
+            FROM activity_log
+            ORDER BY id DESC
+            LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$limit", limit);
+        var list = new List<ActivityLogEntry>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            list.Add(new ActivityLogEntry
+            {
+                Id = reader.GetInt64(0),
+                CreatedAt = DateTime.Parse(reader.GetString(1)),
+                Action = reader.GetString(2),
+                Detail = reader.IsDBNull(3) ? null : reader.GetString(3),
+                DocumentId = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                ProductName = reader.IsDBNull(5) ? null : reader.GetString(5)
+            });
+        }
+        return list;
     }
 
     private static void AddDocumentParams(SqliteCommand cmd, SdsDocument doc)

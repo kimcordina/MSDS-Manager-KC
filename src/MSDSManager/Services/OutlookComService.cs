@@ -187,6 +187,44 @@ public sealed class OutlookComService
         return intro + existingHtml;
     }
 
+    public void CreateNewMailDraft(string subject, string bodyPlain, string? toAddress = null)
+    {
+        dynamic? outlook = null;
+        dynamic? mail = null;
+        try
+        {
+            outlook = GetOutlookApplication();
+            // OlItemType.olMailItem = 0
+            mail = outlook.CreateItem(0);
+            mail.Subject = subject ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(toAddress))
+                mail.To = toAddress;
+            mail.Body = bodyPlain ?? string.Empty;
+            mail.Display(false);
+        }
+        finally
+        {
+            ReleaseCom(mail);
+            ReleaseCom(outlook);
+        }
+    }
+
+    public static string BuildSupplierRequestBody(SdsDocument document) =>
+        $"""
+        Good afternoon,
+
+        Please could you send the latest Safety Data Sheet for the following product:
+
+        Product: {document.ProductName}
+        Our current file: {document.FileName}
+        Current revision date on file: {document.RevisionDateDisplay}
+        Current version on file: {document.Version ?? "Unknown"}
+
+        Kindly confirm whether our copy is still current, or provide the latest SDS PDF.
+
+        Thank you.
+        """;
+
     public static string DefaultIntroPlain() =>
         """
         Good afternoon,

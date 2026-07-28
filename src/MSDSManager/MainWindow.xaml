@@ -50,6 +50,9 @@
                     <Button Content="Attach selection to Outlook"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding AttachSelectionToOutlookCommand}"/>
+                    <Button Content="Review dashboard"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding OpenReviewDashboardCommand}"/>
                     <Button Content="Choose SDS Folder"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding BrowseLibraryCommand}"/>
@@ -245,6 +248,17 @@
                                 Command="{Binding ToggleFavouriteCommand}"
                                 Margin="0,12,0,0"
                                 HorizontalAlignment="Left"/>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Content="Mark verified"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Command="{Binding MarkSelectedVerifiedCommand}"/>
+                            <Button Content="Request latest SDS"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Command="{Binding RequestLatestForSelectedCommand}"/>
+                            <Button Content="Export register"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Command="{Binding ExportSdsRegisterCommand}"/>
+                        </WrapPanel>
 
                         <TextBlock Text="Aliases / customer names"
                                    FontWeight="SemiBold"
