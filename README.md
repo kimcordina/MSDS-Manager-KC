@@ -30,6 +30,13 @@ Windows desktop app for fast Safety Data Sheet (SDS/MSDS) selection from a local
 - Activity log of verifications, requests, exports, and detected version changes
 - **Export SDS register (CSV)** for records / audits
 
+### Phase 4 — Organise folders
+- **Suggest only** — no silent auto-move
+- Detect **uncategorised** and likely **wrong-folder** files
+- Suggest deep nested targets (e.g. `Kitchen/Dishwashing`)
+- You approve → app **moves** files → re-indexes
+- Parent category tabs include nested children
+
 ## Requirements (Windows work PC)
 
 - Windows 10/11

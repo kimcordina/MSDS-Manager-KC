@@ -10,15 +10,23 @@ Before coding, read **AGENTS.md** at the repo root for full handoff instructions
 ## Snapshot
 
 - Windows .NET 8 WPF app + Outlook 2019 COM (not a web add-in)
-- Phases 1–3 already on `main` (library, Outlook match/attach, review dashboard)
+- Phases 1–4 on `main` (library, Outlook, review dashboard, **organise folders**)
 - Built on Mac; **run/test only on Windows**
-- Never send email automatically — propose → approve → attach
+- Never send email automatically
+- Never move files without explicit approval (Organise folders = suggest → approve → move)
+
+## Folder organise decisions (locked)
+
+- Suggest only
+- Move (not copy) after approval
+- Detect wrong folder as well as uncategorised
+- Deep nesting supported (`Kitchen/Dishwashing`); parent category filter includes children
 
 ## Tomorrow’s default next step
 
 1. `git pull` && `dotnet run --project src\MSDSManager\MSDSManager.csproj`
 2. Point at real OneDrive SDS folder → re-index
-3. Smoke-test library + Outlook flow with a real client email
-4. Fix real-data / COM issues before adding new features
+3. Smoke-test library + Outlook + Organise folders with real files
+4. Fix real-data / COM / move issues before adding new features
 
 Do not invent a new architecture unless the user asks. Prefer small fixes against live SDS files and Outlook 2019.

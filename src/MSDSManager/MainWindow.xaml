@@ -53,6 +53,9 @@
                     <Button Content="Review dashboard"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding OpenReviewDashboardCommand}"/>
+                    <Button Content="Organise folders"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding OpenFolderOrganiserCommand}"/>
                     <Button Content="Choose SDS Folder"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding BrowseLibraryCommand}"/>

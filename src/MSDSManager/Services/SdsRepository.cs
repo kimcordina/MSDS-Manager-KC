@@ -185,8 +185,10 @@ public sealed class SdsRepository
         if (!string.IsNullOrWhiteSpace(category) &&
             !string.Equals(category, "All", StringComparison.OrdinalIgnoreCase))
         {
-            where.Add("d.category = $category");
+            // Exact folder or any deeper nested path under it (Kitchen matches Kitchen/Dishwashing)
+            where.Add("(d.category = $category OR d.category LIKE $category_like)");
             cmd.Parameters.AddWithValue("$category", category);
+            cmd.Parameters.AddWithValue("$category_like", category.TrimEnd('/') + "/%");
         }
 
         if (favouritesOnly)

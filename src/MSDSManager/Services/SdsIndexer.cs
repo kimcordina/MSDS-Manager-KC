@@ -191,12 +191,8 @@ public sealed class SdsIndexer
         _repository.UpdateStatuses(docs);
     }
 
-    private static string DeriveCategory(string rootPath, string filePath)
-    {
-        var relative = Path.GetRelativePath(rootPath, filePath);
-        var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return parts.Length > 1 ? parts[0] : "Uncategorised";
-    }
+    private static string DeriveCategory(string rootPath, string filePath) =>
+        FolderOrganiserService.DeriveCategoryPath(rootPath, filePath);
 
     private static string DeriveProductName(string fileName)
     {

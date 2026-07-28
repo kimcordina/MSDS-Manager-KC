@@ -485,6 +485,38 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenFolderOrganiser()
+    {
+        if (string.IsNullOrWhiteSpace(LibraryPath) || !Directory.Exists(LibraryPath))
+        {
+            MessageBox.Show("Choose a valid SDS library folder first.", "MSDS Manager KC",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var organiser = new FolderOrganiserService(_repository);
+        var vm = new FolderOrganiseViewModel(
+            _settings,
+            _repository,
+            _indexer,
+            organiser,
+            afterChanges: async () =>
+            {
+                RefreshDocuments();
+                await Task.CompletedTask;
+            });
+
+        var window = new FolderOrganiseWindow
+        {
+            Owner = Application.Current.MainWindow,
+            DataContext = vm
+        };
+        vm.ScanCommand.Execute(null);
+        window.ShowDialog();
+        RefreshDocuments();
+    }
+
+    [RelayCommand]
     private void OpenReviewDashboard()
     {
         var vm = new ReviewDashboardViewModel(
