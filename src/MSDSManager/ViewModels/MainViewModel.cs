@@ -28,6 +28,8 @@ public partial class MainViewModel : ObservableObject
     private readonly SdsIndexer _indexer;
     private readonly PackService _packService;
     private readonly ExportService _exportService;
+    private readonly OutlookComService _outlook;
+    private readonly RequestMatcher _matcher;
     private CancellationTokenSource? _indexCts;
 
     public ObservableCollection<SelectableDocument> Documents { get; } = [];
@@ -80,13 +82,17 @@ public partial class MainViewModel : ObservableObject
         SdsRepository repository,
         SdsIndexer indexer,
         PackService packService,
-        ExportService exportService)
+        ExportService exportService,
+        OutlookComService outlook,
+        RequestMatcher matcher)
     {
         _settings = settings;
         _repository = repository;
         _indexer = indexer;
         _packService = packService;
         _exportService = exportService;
+        _outlook = outlook;
+        _matcher = matcher;
         LibraryPath = settings.LibraryRootPath ?? string.Empty;
     }
 
@@ -410,6 +416,72 @@ public partial class MainViewModel : ObservableObject
         var path = _exportService.CreateZip(selected, dialog.FileName);
         _repository.TouchUsed(selected.Select(d => d.Id));
         StatusMessage = $"Created zip: {path}";
+    }
+
+    [RelayCommand]
+    private void FindRequestedFromOutlook()
+    {
+        var vm = new OutlookMatchViewModel(
+            _repository,
+            _matcher,
+            _outlook,
+            _settings,
+            onCompleted: () =>
+            {
+                RefreshDocuments();
+                StatusMessage = "Outlook reply prepared with approved SDS attachments.";
+            });
+
+        var window = new OutlookMatchWindow
+        {
+            Owner = Application.Current.MainWindow,
+            DataContext = vm
+        };
+        window.ShowDialog();
+        RefreshDocuments();
+    }
+
+    [RelayCommand]
+    private void AttachSelectionToOutlook()
+    {
+        var selected = GetSelectedDocuments();
+        if (selected.Count == 0)
+        {
+            MessageBox.Show("Select one or more SDS files first.", "MSDS Manager KC",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var template = string.IsNullOrWhiteSpace(_settings.ReplyTemplate)
+            ? OutlookComService.DefaultIntroPlain()
+            : _settings.ReplyTemplate!;
+
+        try
+        {
+            // Prefer attaching into an open compose window; otherwise create a reply from the selected mail.
+            try
+            {
+                _outlook.AttachToActiveCompose(selected.Select(d => d.FilePath), template);
+                StatusMessage = $"Attached {selected.Count} SDS file(s) to the open Outlook compose window.";
+            }
+            catch (InvalidOperationException)
+            {
+                _outlook.CreateReplyWithAttachments(selected.Select(d => d.FilePath), template);
+                StatusMessage = $"Created Outlook reply with {selected.Count} SDS attachment(s). Nothing was sent.";
+            }
+
+            _repository.TouchUsed(selected.Select(d => d.Id));
+            MessageBox.Show(
+                "SDS files were attached in Outlook.\n\nNothing was sent — review the reply and send when ready.",
+                "MSDS Manager KC",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+            MessageBox.Show(ex.Message, "Outlook attach failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private List<SdsDocument> GetSelectedDocuments() =>

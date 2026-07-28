@@ -45,6 +45,11 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Find SDS from Outlook"
+                            Command="{Binding FindRequestedFromOutlookCommand}"/>
+                    <Button Content="Attach selection to Outlook"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding AttachSelectionToOutlookCommand}"/>
                     <Button Content="Choose SDS Folder"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding BrowseLibraryCommand}"/>
@@ -142,6 +147,8 @@
                         </WrapPanel>
                         <WrapPanel Margin="0,10,0,0">
                             <Button Content="Open PDFs" Command="{Binding OpenSelectedCommand}"/>
+                            <Button Content="Attach to Outlook"
+                                    Command="{Binding AttachSelectionToOutlookCommand}"/>
                             <Button Content="Copy to folder"
                                     Style="{StaticResource SecondaryButton}"
                                     Command="{Binding CopyToFolderCommand}"/>

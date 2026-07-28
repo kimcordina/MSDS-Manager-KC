@@ -26,6 +26,8 @@ public sealed class AppSettings
     public string? LibraryRootPath { get; set; }
     public string? LastExportFolder { get; set; }
     public int ReviewAfterMonths { get; set; } = 36;
+    public string? ReplyTemplate { get; set; }
+
 
     public static AppSettings Load()
     {

@@ -1,43 +1,62 @@
 # MSDS Manager KC
 
-Windows desktop app for fast Safety Data Sheet (SDS/MSDS) selection from a local OneDrive-synced folder.
+Windows desktop app for fast Safety Data Sheet (SDS/MSDS) selection from a local OneDrive-synced folder, with Outlook 2019 reply attachment.
 
-**Phase 1 (this repo):** library indexing, search, categories, multi-select, aliases, saved client packs, revision/status badges, copy/zip export.
+**Principle:** the software proposes → you approve → Outlook attaches. Nothing is sent automatically.
 
-**Later:** Outlook 2019 COM integration (propose → you approve → attach).
+## What's included
+
+### Phase 1 — SDS library
+- Choose OneDrive SDS folder and index PDFs in place
+- Search, categories, multi-select, favourites, recently used
+- Aliases / customer names
+- Saved client packs
+- Revision/status badges (Current / Review recommended / Superseded / Incomplete)
+- Open PDFs, copy to folder, export zip, reveal in Explorer
+
+### Phase 2 — Outlook 2019 integration
+- **Find SDS from Outlook** — reads the selected email, extracts requested products, shows a match table
+- Approve / correct matches (amber/uncertain stays unchecked until you choose)
+- **Attach approved SDS to reply** — creates an Outlook reply, attaches PDFs, inserts a standard response
+- **Attach selection to Outlook** — attaches your manually selected files to an open compose window, or creates a reply
+- Confirmed request terms are saved as aliases for next time
+- Paste-email fallback if you want to test matching without Outlook selection
 
 ## Requirements (Windows work PC)
 
 - Windows 10/11
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (or SDK if building)
-- Outlook 2019 (needed only from Phase 2)
-- Your SDS PDFs available in a local folder (OneDrive sync folder is ideal)
+- [.NET 8 SDK or Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Classic **Outlook 2019** (desktop) running
+- SDS PDFs in a local/OneDrive-synced folder
 
 ## Clone and run
 
 ```powershell
 git clone https://github.com/kimcordina/MSDS-Manager-KC.git
 cd MSDS-Manager-KC
+git pull
 dotnet restore
 dotnet run --project src\MSDSManager\MSDSManager.csproj
 ```
 
 Or open `MSDSManager.sln` in Visual Studio 2022 and press F5.
 
-## First-time use
+## Typical workflow
 
-1. Click **Choose SDS Folder** and select your OneDrive SDS root (the folder that contains Kitchen, Housekeeping, etc.).
-2. Click **Re-index Library**. The app scans PDFs in place (nothing is moved), extracts product/revision hints, and builds a local SQLite index.
-3. Search or browse by category, tick the files you need.
-4. Use **Copy to folder** or **Export zip** for attachment packs.
-5. Save repeat sets as **client packs** (e.g. Hotel Kitchen Pack).
+1. **Choose SDS Folder** → **Re-index Library**
+2. Client emails asking for SDS documents
+3. Select that email in Outlook
+4. In MSDS Manager, click **Find SDS from Outlook**
+5. Review the match table — fix any uncertain rows
+6. Click **Attach approved SDS to reply**
+7. Review the Outlook reply and send yourself
 
-Local data is stored under:
+## Local data
 
 `%LocalAppData%\MSDSManagerKC\`
 
 - `sds-library.db` — index, aliases, packs  
-- `settings.json` — library path and preferences  
+- `settings.json` — library path, reply template  
 
 Source PDFs stay in OneDrive untouched.
 
@@ -50,27 +69,22 @@ Source PDFs stay in OneDrive untouched.
 | Superseded | Newer SDS for the same product exists in your library |
 | Incomplete metadata | Revision date/version could not be read from the PDF |
 
-Age alone does not mean “expired”. Treat review badges as operational reminders.
-
 ## Project layout
 
 ```
 MSDSManager.sln
 src/MSDSManager/
   Models/
-  Services/          # SQLite repo, PDF extract, indexer, export
+  Services/          # SQLite, PDF extract, indexer, export, Outlook COM, request matcher
   ViewModels/
-  MainWindow.xaml    # Phase 1 UI
+  MainWindow.xaml
+  OutlookMatchWindow.xaml
 ```
 
-## Tomorrow on the work PC
+## Phase 3 (next)
 
-1. Install .NET 8 SDK if needed.
-2. Clone this repo.
-3. Point the app at your real SDS OneDrive folder and re-index.
-4. Confirm search/packs/export feel right.
-5. Then we can start Phase 2 (Outlook 2019 attach-to-reply).
+Supplier verification dates, reminders, request-new-SDS emails, version comparison summaries, exportable SDS register.
 
-## Note about this Mac
+## Note about Mac development
 
-WPF cannot run on macOS. This scaffolding was prepared here for GitHub; build and test on Windows.
+WPF and Outlook COM only run on Windows. Code can be written on macOS and pushed to GitHub; build/test on the Windows PC.

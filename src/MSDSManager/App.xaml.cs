@@ -18,8 +18,10 @@ public partial class App : Application
         var indexer = new SdsIndexer(repository);
         var packService = new PackService(repository);
         var exportService = new ExportService();
+        var outlook = new OutlookComService();
+        var matcher = new RequestMatcher(repository);
 
-        var mainVm = new MainViewModel(settings, repository, indexer, packService, exportService);
+        var mainVm = new MainViewModel(settings, repository, indexer, packService, exportService, outlook, matcher);
         var window = new MainWindow { DataContext = mainVm };
         window.Show();
 
