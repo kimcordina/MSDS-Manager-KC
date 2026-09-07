@@ -42,6 +42,11 @@
                     <Button Content="Clear"
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding ClearApprovalsCommand}"/>
+                    <Button Content="Undo last move"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding UndoLastMoveAsyncCommand}"
+                            IsEnabled="{Binding CanUndo}"
+                            ToolTip="{Binding UndoHint}"/>
                 </StackPanel>
             </Grid>
         </Border>

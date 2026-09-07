@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{40E286EB-93B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSDSManager", "src\MSDSManager\MSDSManager.csproj", "{D27DC3A3-A6A3-4610-B019-2F9D4E9195EE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8C1B0A44-2E6A-4C3F-9F11-5E6B0C1A2D77}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSDSManager.Tests", "tests\MSDSManager.Tests\MSDSManager.Tests.csproj", "{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{D27DC3A3-A6A3-4610-B019-2F9D4E9195EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D27DC3A3-A6A3-4610-B019-2F9D4E9195EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D27DC3A3-A6A3-4610-B019-2F9D4E9195EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D27DC3A3-A6A3-4610-B019-2F9D4E9195EE} = {40E286EB-93B4-4E27-9DC4-B49FF26F7DA8}
+		{B91E4D2C-7A18-4F0E-9C33-1A5D8E0F4B21} = {8C1B0A44-2E6A-4C3F-9F11-5E6B0C1A2D77}
 	EndGlobalSection
 EndGlobal

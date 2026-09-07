@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MSDSManager.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\MSDSManager\Models\*.cs" Link="Linked\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\MSDSManager\Services\AppSettings.cs" Link="Linked\Services\AppSettings.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\RequestMatcher.cs" Link="Linked\Services\RequestMatcher.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\PdfMetadataExtractor.cs" Link="Linked\Services\PdfMetadataExtractor.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\SdsIndexer.cs" Link="Linked\Services\SdsIndexer.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\SdsRepository.cs" Link="Linked\Services\SdsRepository.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\FolderOrganiserService.cs" Link="Linked\Services\FolderOrganiserService.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\VersionCompareService.cs" Link="Linked\Services\VersionCompareService.cs" />
+    <Compile Include="..\..\src\MSDSManager\Services\OutlookUserMessages.cs" Link="Linked\Services\OutlookUserMessages.cs" />
+  </ItemGroup>
+
+</Project>

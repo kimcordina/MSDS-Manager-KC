@@ -10,8 +10,15 @@
     <ApplicationTitle>MSDS Manager KC</ApplicationTitle>
     <AssemblyName>MSDSManager</AssemblyName>
     <RootNamespace>MSDSManager</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
   </PropertyGroup>
+
+  <!-- FolderBrowserDialog needs WinForms; do not import its types globally
+       or Application/MessageBox clash with WPF (CS0104). -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

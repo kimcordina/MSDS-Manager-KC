@@ -125,6 +125,7 @@ public sealed class FolderOrganiserService
         var moved = 0;
         var failed = 0;
         var errors = new List<string>();
+        var moves = new List<FolderMoveRecord>();
 
         foreach (var item in approved)
         {
@@ -146,6 +147,14 @@ public sealed class FolderOrganiserService
 
                 File.Move(source, destPath);
 
+                moves.Add(new FolderMoveRecord
+                {
+                    SourcePath = source,
+                    DestinationPath = destPath,
+                    FileName = item.Document.FileName,
+                    ProductName = item.Document.ProductName
+                });
+
                 _repository.LogActivity(
                     "Folder move approved",
                     $"{item.CurrentFolder} → {item.SuggestedFolder}",
@@ -165,7 +174,62 @@ public sealed class FolderOrganiserService
         {
             Moved = moved,
             Failed = failed,
-            Errors = errors
+            Errors = errors,
+            Moves = moves
+        };
+    }
+
+    public FolderMoveResult UndoMoves(IEnumerable<FolderMoveRecord> moves)
+    {
+        var moved = 0;
+        var failed = 0;
+        var errors = new List<string>();
+        var undone = new List<FolderMoveRecord>();
+
+        foreach (var item in moves.Reverse())
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(item.DestinationPath) ||
+                    !File.Exists(item.DestinationPath))
+                {
+                    failed++;
+                    errors.Add($"{item.FileName}: moved file is no longer at {item.DestinationPath}");
+                    continue;
+                }
+
+                if (File.Exists(item.SourcePath))
+                {
+                    failed++;
+                    errors.Add($"{item.FileName}: original path already has a file — not overwritten");
+                    continue;
+                }
+
+                var sourceDir = Path.GetDirectoryName(item.SourcePath);
+                if (!string.IsNullOrWhiteSpace(sourceDir))
+                    Directory.CreateDirectory(sourceDir);
+
+                File.Move(item.DestinationPath, item.SourcePath);
+                undone.Add(item);
+                _repository.LogActivity(
+                    "Folder move undone",
+                    $"{item.DestinationPath} → {item.SourcePath}",
+                    productName: item.ProductName);
+                moved++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                errors.Add($"{item.FileName}: {ex.Message}");
+            }
+        }
+
+        return new FolderMoveResult
+        {
+            Moved = moved,
+            Failed = failed,
+            Errors = errors,
+            Moves = undone
         };
     }
 

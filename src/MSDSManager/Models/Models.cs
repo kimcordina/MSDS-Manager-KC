@@ -66,3 +66,51 @@ public sealed class IndexProgress
     public string CurrentFile { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
 }
+
+public sealed class IndexResult
+{
+    public int TotalFiles { get; init; }
+    public int NewFiles { get; init; }
+    public int ChangedFiles { get; init; }
+    public int UnchangedFiles { get; init; }
+    public int RemovedFiles { get; init; }
+    public bool ForcedFull { get; init; }
+
+    public int Indexed => NewFiles + ChangedFiles;
+
+    public string Describe()
+    {
+        if (ForcedFull)
+            return $"Indexed {TotalFiles} PDF(s). Removed {RemovedFiles} missing file(s).";
+
+        if (Indexed == 0 && RemovedFiles == 0)
+            return $"Library is up to date ({UnchangedFiles} PDF(s) unchanged).";
+
+        return $"Indexed {NewFiles} new and {ChangedFiles} changed PDF(s); " +
+               $"{UnchangedFiles} unchanged; removed {RemovedFiles} missing.";
+    }
+}
+
+public sealed class LibraryChangeSummary
+{
+    public int NewCount { get; init; }
+    public int ChangedCount { get; init; }
+    public int MissingCount { get; init; }
+    public int UnchangedCount { get; init; }
+
+    public bool HasChanges => NewCount + ChangedCount + MissingCount > 0;
+
+    public string Describe()
+    {
+        var parts = new List<string>();
+        if (NewCount > 0)
+            parts.Add($"{NewCount} new");
+        if (ChangedCount > 0)
+            parts.Add($"{ChangedCount} changed");
+        if (MissingCount > 0)
+            parts.Add($"{MissingCount} missing from disk");
+        if (parts.Count == 0)
+            return $"{UnchangedCount} PDF(s) already indexed — no file changes.";
+        return string.Join(", ", parts) + $" ({UnchangedCount} unchanged).";
+    }
+}

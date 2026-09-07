@@ -10,10 +10,10 @@ Before coding, read **AGENTS.md** at the repo root for full handoff instructions
 ## Snapshot
 
 - Windows .NET 8 WPF app + Outlook 2019 COM (not a web add-in)
-- Phases 1–4 on `main` (library, Outlook, review dashboard, **organise folders**)
-- Built on Mac; **run/test only on Windows**
+- Phases 1–4 plus daily-use hardening (matching, Outlook errors, incremental index, undo last move)
+- Built on Mac; **WPF Release build / Outlook tests only on Windows**
 - Never send email automatically
-- Never move files without explicit approval (Organise folders = suggest → approve → move)
+- Never move files without explicit approval (Organise folders = suggest → approve → move; undo last batch)
 
 ## Folder organise decisions (locked)
 
