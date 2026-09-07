@@ -14,7 +14,7 @@ Phases **1–4 are implemented** on `main`, plus **daily-use hardening (0.5.0)**
 
 | Area | What changed |
 |------|----------------|
-| Build | CS0104 `Application` clash (UseWPF + UseWindowsForms) fixed so `dotnet build -c Release` / publish works on Windows |
+| Build | CS0104 `Application`/`MessageBox`/`Color` clash (UseWPF + UseWindowsForms) fixed; Release compile verified |
 | Matching | Messy emails, product codes (e.g. LUX5), lists without “please send SDS for”; visible alias learning + Save aliases |
 | Outlook | User-facing errors: Outlook not running, no selection, calendar/task item; paste-email fallback kept obvious |
 | Metadata | Scan first 4 pages + last page; missing revision date alone is no longer Incomplete if product/version was read |

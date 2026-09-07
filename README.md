@@ -57,6 +57,7 @@ cd MSDS-Manager-KC
 git pull
 dotnet restore
 dotnet build src\MSDSManager\MSDSManager.csproj -c Release
+# Expected: 0 errors. CS0104 Application clash is fixed.
 dotnet run --project src\MSDSManager\MSDSManager.csproj
 ```
 

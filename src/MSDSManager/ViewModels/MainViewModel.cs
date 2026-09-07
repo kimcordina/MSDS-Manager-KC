@@ -151,7 +151,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void BrowseLibrary()
+    private async Task BrowseLibrary()
     {
         using var dialog = new WinForms.FolderBrowserDialog
         {
@@ -170,6 +170,15 @@ public partial class MainViewModel : ObservableObject
         _settings.LibraryRootPath = LibraryPath;
         _settings.Save();
         StatusMessage = $"Library folder set: {LibraryPath}";
+
+        var indexNow = MessageBox.Show(
+            "Index new and changed PDFs in this folder now?\n\n" +
+            "Unchanged files are skipped. Nothing is emailed or moved.",
+            "MSDS Manager KC",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (indexNow == MessageBoxResult.Yes)
+            await ReindexAsync(forceFull: false);
     }
 
     [RelayCommand]
@@ -299,10 +308,14 @@ public partial class MainViewModel : ObservableObject
         if (SelectedDocument is null || string.IsNullOrWhiteSpace(NewAlias))
             return;
 
-        _repository.AddAlias(SelectedDocument.Document.Id, NewAlias);
+        var entered = NewAlias.Trim();
+        _repository.AddAlias(SelectedDocument.Document.Id, entered);
         NewAlias = string.Empty;
         OnSelectedDocumentChanged(SelectedDocument);
-        StatusMessage = "Alias saved.";
+        var variants = RequestMatcher.AliasVariants(entered).ToList();
+        StatusMessage = variants.Count > 1
+            ? $"Alias saved ({string.Join(", ", variants)})."
+            : "Alias saved.";
         RefreshDocuments();
     }
 

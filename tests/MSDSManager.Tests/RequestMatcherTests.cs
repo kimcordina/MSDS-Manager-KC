@@ -85,6 +85,20 @@ public sealed class RequestMatcherTests
     }
 
     [Fact]
+    public void AddAlias_stores_compact_code_variant()
+    {
+        var (repo, _, lifetime) = TestHelpers.CreateRepository();
+        using (lifetime)
+        {
+            var doc = TestHelpers.SeedDocument(repo, "Luxury Wash", "LUX-5.pdf");
+            repo.AddAlias(doc.Id, "LUX-5");
+            var aliases = repo.GetAliases(doc.Id);
+            Assert.Contains(aliases, a => a.Equals("LUX-5", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(aliases, a => a.Equals("lux5", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public void Ignores_section_and_page_false_codes()
     {
         var terms = RequestMatcher.ExtractRequestedTerms(

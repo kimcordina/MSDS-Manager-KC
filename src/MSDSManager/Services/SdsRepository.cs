@@ -262,6 +262,12 @@ public sealed class SdsRepository
 
     public void AddAlias(long documentId, string alias)
     {
+        foreach (var variant in RequestMatcher.AliasVariants(alias))
+            InsertAlias(documentId, variant);
+    }
+
+    private void InsertAlias(long documentId, string alias)
+    {
         alias = alias.Trim();
         if (string.IsNullOrWhiteSpace(alias))
             return;
