@@ -9,12 +9,25 @@ namespace MSDSManager.Services;
 /// </summary>
 public sealed class OutlookComService
 {
-    public bool IsOutlookAvailable()
+    public const string PasteFallbackHint = OutlookUserMessages.PasteFallbackHint;
+
+    public bool IsOutlookInstalled()
     {
         try
         {
-            var type = Type.GetTypeFromProgID("Outlook.Application");
-            return type is not null;
+            return Type.GetTypeFromProgID("Outlook.Application") is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool IsOutlookRunning()
+    {
+        try
+        {
+            return TryGetRunningOutlook(out _);
         }
         catch
         {
@@ -27,36 +40,36 @@ public sealed class OutlookComService
         dynamic? outlook = null;
         try
         {
-            outlook = GetOutlookApplication();
-            dynamic explorer = outlook.ActiveExplorer();
-            if (explorer is null)
-                throw new InvalidOperationException("No active Outlook window. Open Outlook and select the client email.");
+            outlook = GetRunningOutlook();
 
-            dynamic selection = explorer.Selection;
-            if (selection is null || selection.Count < 1)
-                throw new InvalidOperationException("Select a client email in Outlook first.");
-
-            dynamic item = selection[1];
-            // OlObjectClass.olMail = 43
-            if ((int)item.Class != 43)
-                throw new InvalidOperationException("The selected Outlook item is not an email message.");
-
-            var body = (string)(item.Body ?? string.Empty);
-            var subject = (string)(item.Subject ?? string.Empty);
-            var sender = SafeSender(item);
-            var entryId = (string)(item.EntryID ?? string.Empty);
-
-            return new OutlookMailSnapshot
+            try
             {
-                Subject = subject,
-                SenderName = sender,
-                BodyText = body,
-                EntryId = entryId
-            };
+                return ReadFromExplorer(outlook);
+            }
+            catch (InvalidOperationException explorerError)
+            {
+                try
+                {
+                    return ReadFromInspector(outlook);
+                }
+                catch (InvalidOperationException)
+                {
+                    throw explorerError;
+                }
+            }
         }
-        finally
+        catch (InvalidOperationException)
         {
-            ReleaseCom(outlook);
+            throw;
+        }
+        catch (COMException ex)
+        {
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                "Could not read the selected Outlook item." + PasteFallbackHint, ex);
         }
     }
 
@@ -77,19 +90,8 @@ public sealed class OutlookComService
         dynamic? reply = null;
         try
         {
-            outlook = GetOutlookApplication();
-            dynamic explorer = outlook.ActiveExplorer();
-            if (explorer is null)
-                throw new InvalidOperationException("No active Outlook window.");
-
-            dynamic selection = explorer.Selection;
-            if (selection is null || selection.Count < 1)
-                throw new InvalidOperationException("Select the client email in Outlook first.");
-
-            dynamic item = selection[1];
-            if ((int)item.Class != 43)
-                throw new InvalidOperationException("The selected Outlook item is not an email message.");
-
+            outlook = GetRunningOutlook();
+            var item = RequireSelectedMail(outlook);
             reply = replyAll ? item.ReplyAll() : item.Reply();
 
             foreach (var path in paths)
@@ -99,10 +101,17 @@ public sealed class OutlookComService
             reply.HTMLBody = BuildHtmlBody(replyIntroHtml, existingHtml);
             reply.Display(false);
         }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (COMException ex)
+        {
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
+        }
         finally
         {
             ReleaseCom(reply);
-            ReleaseCom(outlook);
         }
     }
 
@@ -119,14 +128,14 @@ public sealed class OutlookComService
         dynamic? outlook = null;
         try
         {
-            outlook = GetOutlookApplication();
+            outlook = GetRunningOutlook();
             dynamic inspector = outlook.ActiveInspector();
             if (inspector is null)
                 throw new InvalidOperationException(
                     "No compose window is open. Select the client email and use Reply, or use 'Create reply with SDS'.");
 
             dynamic item = inspector.CurrentItem;
-            if (item is null || (int)item.Class != 43)
+            if (item is null || !IsMailClass(SafeClass(item)))
                 throw new InvalidOperationException("The active Outlook window is not an email.");
 
             foreach (var path in paths)
@@ -141,50 +150,14 @@ public sealed class OutlookComService
 
             inspector.Activate();
         }
-        finally
+        catch (InvalidOperationException)
         {
-            ReleaseCom(outlook);
+            throw;
         }
-    }
-
-    private static dynamic GetOutlookApplication()
-    {
-        var type = Type.GetTypeFromProgID("Outlook.Application")
-                   ?? throw new InvalidOperationException(
-                       "Outlook desktop was not found. Outlook 2019 (or later classic Outlook) must be installed.");
-
-        // Creating Outlook.Application reuses the running desktop instance when present.
-        return Activator.CreateInstance(type)
-               ?? throw new InvalidOperationException("Could not start Outlook.");
-    }
-
-    private static string SafeSender(dynamic item)
-    {
-        try
+        catch (COMException ex)
         {
-            return (string)(item.SenderName ?? string.Empty);
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
         }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string BuildHtmlBody(string introHtml, string existingHtml)
-    {
-        var intro = string.IsNullOrWhiteSpace(introHtml)
-            ? DefaultIntroHtml()
-            : introHtml;
-
-        // If intro already looks like HTML, use as-is; otherwise wrap paragraphs.
-        if (!intro.Contains('<'))
-        {
-            var parts = intro.Replace("\r\n", "\n").Split('\n', StringSplitOptions.None)
-                .Select(line => string.IsNullOrWhiteSpace(line) ? "<br/>" : $"<p>{System.Net.WebUtility.HtmlEncode(line)}</p>");
-            intro = string.Join(string.Empty, parts);
-        }
-
-        return intro + existingHtml;
     }
 
     public void CreateNewMailDraft(string subject, string bodyPlain, string? toAddress = null)
@@ -193,7 +166,7 @@ public sealed class OutlookComService
         dynamic? mail = null;
         try
         {
-            outlook = GetOutlookApplication();
+            outlook = GetRunningOutlook();
             // OlItemType.olMailItem = 0
             mail = outlook.CreateItem(0);
             mail.Subject = subject ?? string.Empty;
@@ -202,10 +175,17 @@ public sealed class OutlookComService
             mail.Body = bodyPlain ?? string.Empty;
             mail.Display(false);
         }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (COMException ex)
+        {
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
+        }
         finally
         {
             ReleaseCom(mail);
-            ReleaseCom(outlook);
         }
     }
 
@@ -241,6 +221,194 @@ public sealed class OutlookComService
         <p>Should you require any additional documentation, please let us know.</p>
         """;
 
+    private static OutlookMailSnapshot ReadFromExplorer(dynamic outlook)
+    {
+        dynamic explorer;
+        try
+        {
+            explorer = outlook.ActiveExplorer();
+        }
+        catch (COMException ex)
+        {
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
+        }
+
+        if (explorer is null)
+            throw new InvalidOperationException(
+                "No active Outlook window. Open Outlook, click the client email in the Inbox, then try again." +
+                PasteFallbackHint);
+
+        dynamic selection;
+        try
+        {
+            selection = explorer.Selection;
+        }
+        catch (COMException)
+        {
+            throw new InvalidOperationException(
+                "Outlook could not report the current selection. Click one email in the Inbox (not Calendar) and try again." +
+                PasteFallbackHint);
+        }
+
+        if (selection is null || selection.Count < 1)
+            throw new InvalidOperationException(OutlookUserMessages.NoMailSelected());
+
+        var mail = FindFirstMail(selection);
+        if (mail is null)
+        {
+            var firstClass = SafeClass(selection[1]);
+            throw new InvalidOperationException(OutlookUserMessages.DescribeWrongItem(firstClass) + PasteFallbackHint);
+        }
+
+        return SnapshotFromMail(mail);
+    }
+
+    private static OutlookMailSnapshot ReadFromInspector(dynamic outlook)
+    {
+        dynamic inspector;
+        try
+        {
+            inspector = outlook.ActiveInspector();
+        }
+        catch (COMException ex)
+        {
+            throw new InvalidOperationException(OutlookUserMessages.DescribeComFailure(ex), ex);
+        }
+
+        if (inspector is null)
+            throw new InvalidOperationException(
+                "No email is open. Select a message in the Inbox, or paste the email text." +
+                PasteFallbackHint);
+
+        dynamic item = inspector.CurrentItem;
+        if (item is null || !IsMailClass(SafeClass(item)))
+            throw new InvalidOperationException(
+                OutlookUserMessages.DescribeWrongItem(SafeClass(item)) + PasteFallbackHint);
+
+        return SnapshotFromMail(item);
+    }
+
+    private static dynamic RequireSelectedMail(dynamic outlook)
+    {
+        dynamic explorer = outlook.ActiveExplorer();
+        if (explorer is null)
+            throw new InvalidOperationException(
+                "No active Outlook window. Open Outlook and select the client email.");
+
+        dynamic selection = explorer.Selection;
+        if (selection is null || selection.Count < 1)
+            throw new InvalidOperationException("Select the client email in Outlook first.");
+
+        var mail = FindFirstMail(selection);
+        if (mail is null)
+            throw new InvalidOperationException(OutlookUserMessages.DescribeWrongItem(SafeClass(selection[1])));
+
+        return mail;
+    }
+
+    private static dynamic? FindFirstMail(dynamic selection)
+    {
+        var count = (int)selection.Count;
+        for (var i = 1; i <= count; i++)
+        {
+            dynamic item = selection[i];
+            if (IsMailClass(SafeClass(item)))
+                return item;
+        }
+
+        return null;
+    }
+
+    private static OutlookMailSnapshot SnapshotFromMail(dynamic item)
+    {
+        var body = (string)(item.Body ?? string.Empty);
+        var subject = (string)(item.Subject ?? string.Empty);
+        var sender = SafeSender(item);
+        var entryId = (string)(item.EntryID ?? string.Empty);
+
+        return new OutlookMailSnapshot
+        {
+            Subject = subject,
+            SenderName = sender,
+            BodyText = body,
+            EntryId = entryId
+        };
+    }
+
+    private static dynamic GetRunningOutlook()
+    {
+        if (!TryGetRunningOutlook(out var outlook) || outlook is null)
+        {
+            if (Type.GetTypeFromProgID("Outlook.Application") is null)
+            {
+                throw new InvalidOperationException(OutlookUserMessages.OutlookNotInstalled());
+            }
+
+            throw new InvalidOperationException(OutlookUserMessages.OutlookNotRunning());
+        }
+
+        return outlook;
+    }
+
+    private static bool TryGetRunningOutlook(out dynamic? outlook)
+    {
+        outlook = null;
+        var type = Type.GetTypeFromProgID("Outlook.Application");
+        if (type is null)
+            return false;
+
+        var clsid = type.GUID;
+        var hr = GetActiveObject(ref clsid, IntPtr.Zero, out var instance);
+        if (hr != 0 || instance is null)
+            return false;
+
+        outlook = instance;
+        return true;
+    }
+
+    private static bool IsMailClass(int outlookClass) =>
+        outlookClass is 43; // OlObjectClass.olMail
+
+    private static int SafeClass(dynamic item)
+    {
+        try
+        {
+            return (int)item.Class;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static string SafeSender(dynamic item)
+    {
+        try
+        {
+            return (string)(item.SenderName ?? string.Empty);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string BuildHtmlBody(string introHtml, string existingHtml)
+    {
+        var intro = string.IsNullOrWhiteSpace(introHtml)
+            ? DefaultIntroHtml()
+            : introHtml;
+
+        if (!intro.Contains('<'))
+        {
+            var parts = intro.Replace("\r\n", "\n").Split('\n', StringSplitOptions.None)
+                .Select(line => string.IsNullOrWhiteSpace(line) ? "<br/>" : $"<p>{System.Net.WebUtility.HtmlEncode(line)}</p>");
+            intro = string.Join(string.Empty, parts);
+        }
+
+        return intro + existingHtml;
+    }
+
     private static void ReleaseCom(object? com)
     {
         if (com is null)
@@ -255,4 +423,10 @@ public sealed class OutlookComService
             // ignored
         }
     }
+
+    [DllImport("oleaut32.dll", PreserveSig = true)]
+    private static extern int GetActiveObject(
+        ref Guid rclsid,
+        IntPtr reserved,
+        [MarshalAs(UnmanagedType.IUnknown)] out object? ppunk);
 }

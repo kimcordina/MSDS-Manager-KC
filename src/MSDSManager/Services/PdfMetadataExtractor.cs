@@ -7,49 +7,77 @@ namespace MSDSManager.Services;
 
 public sealed class PdfMetadataExtractor
 {
+    private static readonly string DatePattern =
+        @"(\d{1,2}[\/\-\.\s]\d{1,2}[\/\-\.\s]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4})";
+
     private static readonly Regex RevisionDateRegex = new(
-        @"\b(?:revision(?:\s+date)?|date\s+of\s+(?:issue|revision|compilation)|compiled|issued|updated)\s*[:\-]?\s*" +
-        @"(\d{1,2}[\/\-\.\s]\d{1,2}[\/\-\.\s]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})",
+        @"\b(?:revision(?:\s+date)?|rev(?:ision)?\.?\s*date|date\s+of\s+(?:issue|revision|compilation|printing|preparation)|" +
+        @"(?:last\s+)?(?:revised|updated|compiled|issued|printed|prepared)|sds\s+date|print\s+date|date\s+prepared|" +
+        @"revision)\s*[:\-]?\s*" + DatePattern,
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex VersionRegex = new(
-        @"\b(?:version|ver\.?|rev(?:ision)?\.?)\s*[:\-]?\s*(v?\d+(?:\.\d+){0,3})\b",
+        @"\b(?:version(?:\s+no\.?)?|ver\.?|rev(?:ision)?\.?|issue(?:\s+no\.?)?|sds\s+version)\s*[:\-]?\s*(v?\d+(?:\.\d+){0,3})\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ProductRegex = new(
-        @"\b(?:product(?:\s+identifier|\s+name)?|trade\s+name|substance(?:\s+name)?)\s*[:\-]\s*(.+)",
+        @"\b(?:(?:1\.1\s+)?product(?:\s+identifier|\s+name)?|trade\s+name|commercial\s+name|" +
+        @"name\s+of\s+(?:the\s+)?(?:substance|mixture|product)|substance(?:\s+name)?)\s*[:\-]\s*(.+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public PdfExtractionResult Extract(string filePath)
     {
-        var result = new PdfExtractionResult();
-
         try
         {
             using var document = PdfDocument.Open(filePath);
-            var sb = new StringBuilder();
-            var pageLimit = Math.Min(2, document.NumberOfPages);
-
-            for (var i = 1; i <= pageLimit; i++)
-            {
-                var page = document.GetPage(i);
-                sb.AppendLine(page.Text);
-            }
-
-            var text = NormalizeWhitespace(sb.ToString());
-            result.ExtractPreview = text.Length > 1200 ? text[..1200] : text;
-            result.ProductName = FindProductName(text);
-            result.Version = FindVersion(text);
-            result.RevisionDate = FindRevisionDate(text);
+            var text = ReadRelevantPages(document);
+            var result = ExtractFromText(text);
             result.Success = true;
+            return result;
         }
         catch (Exception ex)
         {
-            result.Success = false;
-            result.Error = ex.Message;
+            return new PdfExtractionResult
+            {
+                Success = false,
+                Error = ex.Message
+            };
+        }
+    }
+
+    /// <summary>Parse SDS-like text without opening a PDF (used by tests and fallbacks).</summary>
+    public PdfExtractionResult ExtractFromText(string text)
+    {
+        var normalized = NormalizeWhitespace(text);
+        return new PdfExtractionResult
+        {
+            Success = true,
+            ExtractPreview = normalized.Length > 1600 ? normalized[..1600] : normalized,
+            ProductName = FindProductName(normalized),
+            Version = FindVersion(normalized),
+            RevisionDate = FindRevisionDate(normalized)
+        };
+    }
+
+    private static string ReadRelevantPages(PdfDocument document)
+    {
+        var sb = new StringBuilder();
+        var pageCount = document.NumberOfPages;
+        // First pages hold Section 1; last page often holds revision/version in Section 16.
+        var firstPages = Math.Min(4, pageCount);
+        var pages = new SortedSet<int>();
+        for (var i = 1; i <= firstPages; i++)
+            pages.Add(i);
+        if (pageCount > firstPages)
+            pages.Add(pageCount);
+
+        foreach (var i in pages)
+        {
+            var page = document.GetPage(i);
+            sb.AppendLine(page.Text);
         }
 
-        return result;
+        return sb.ToString();
     }
 
     private static string? FindProductName(string text)
@@ -59,7 +87,8 @@ public sealed class PdfMetadataExtractor
             return null;
 
         var value = match.Groups[1].Value.Trim();
-        value = Regex.Split(value, @"\s{2,}|\r?\n")[0].Trim();
+        value = Regex.Split(value, @"\s{2,}|\r?\n|section\s+\d", RegexOptions.IgnoreCase)[0].Trim();
+        value = value.Trim('"', '·', '-', '–', ':');
         return value.Length is > 2 and < 180 ? value : null;
     }
 
@@ -73,19 +102,8 @@ public sealed class PdfMetadataExtractor
     {
         foreach (Match match in RevisionDateRegex.Matches(text))
         {
-            if (TryParseDate(match.Groups[1].Value, out var date))
-                return date;
-        }
-
-        // Fallback: first plausible date on page 1 region
-        var dateFallback = Regex.Matches(
-            text[..Math.Min(text.Length, 1500)],
-            @"\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})\b");
-
-        foreach (Match match in dateFallback)
-        {
             if (TryParseDate(match.Groups[1].Value, out var date) &&
-                date.Year is >= 1990 and <= DateTime.UtcNow.Year + 1)
+                date.Year >= 1990 && date.Year <= DateTime.UtcNow.Year + 1)
             {
                 return date;
             }
@@ -102,7 +120,8 @@ public sealed class PdfMetadataExtractor
             "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy",
             "d.M.yyyy", "dd.MM.yyyy", "d/M/yy", "dd/MM/yy",
             "yyyy-MM-dd", "yyyy/MM/dd", "d MMM yyyy", "dd MMM yyyy",
-            "d MMMM yyyy", "dd MMMM yyyy", "MMM d yyyy", "MMMM d yyyy"
+            "d MMMM yyyy", "dd MMMM yyyy", "MMM d yyyy", "MMMM d yyyy",
+            "MMM dd yyyy", "MMMM dd yyyy"
         ];
 
         return DateTime.TryParseExact(

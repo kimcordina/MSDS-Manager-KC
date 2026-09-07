@@ -101,12 +101,34 @@ public partial class MainViewModel : ObservableObject
         RefreshPacks();
         RefreshDocuments();
 
-        if (!string.IsNullOrWhiteSpace(LibraryPath) && Directory.Exists(LibraryPath))
+        if (string.IsNullOrWhiteSpace(LibraryPath) || !Directory.Exists(LibraryPath))
+            return;
+
+        StatusMessage = $"Ready — library: {LibraryPath}";
+
+        LibraryChangeSummary changes;
+        try
         {
-            StatusMessage = $"Ready — library: {LibraryPath}";
+            changes = _indexer.DetectChanges(LibraryPath);
+        }
+        catch
+        {
+            return;
         }
 
-        await Task.CompletedTask;
+        if (!changes.HasChanges)
+            return;
+
+        var confirm = MessageBox.Show(
+            $"The SDS folder has {changes.Describe()}\n\n" +
+            "Index new and changed PDFs now? Unchanged files are skipped.\n\n" +
+            "Nothing is emailed or moved.",
+            "Library files changed",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm == MessageBoxResult.Yes)
+            await ReindexAsync(forceFull: false);
     }
 
     partial void OnSearchTextChanged(string value) => RefreshDocuments();
@@ -160,6 +182,37 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        var forceFull = false;
+        try
+        {
+            var changes = _indexer.DetectChanges(LibraryPath);
+            if (!changes.HasChanges)
+            {
+                var rebuild = MessageBox.Show(
+                    "No new or changed PDFs were found.\n\n" +
+                    "Run a full re-index anyway? This re-reads every PDF (slower) and refreshes metadata.",
+                    "Re-index Library",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (rebuild != MessageBoxResult.Yes)
+                    return;
+                forceFull = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Indexing error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        await ReindexAsync(forceFull);
+    }
+
+    private async Task ReindexAsync(bool forceFull)
+    {
+        if (string.IsNullOrWhiteSpace(LibraryPath) || !Directory.Exists(LibraryPath))
+            return;
+
         _indexCts?.Cancel();
         _indexCts = new CancellationTokenSource();
         IsBusy = true;
@@ -173,14 +226,15 @@ public partial class MainViewModel : ObservableObject
                 StatusMessage = p.Message;
             });
 
-            var count = await _indexer.IndexLibraryAsync(
+            var result = await _indexer.IndexLibraryAsync(
                 LibraryPath,
                 _settings.ReviewAfterMonths,
                 progress,
-                _indexCts.Token);
+                _indexCts.Token,
+                forceFull);
 
             RefreshDocuments();
-            StatusMessage = $"Indexed {count} PDF(s). Status badges updated.";
+            StatusMessage = result.Describe() + " Status badges updated.";
         }
         catch (OperationCanceledException)
         {

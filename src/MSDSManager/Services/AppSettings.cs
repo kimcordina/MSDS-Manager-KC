@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using MSDSManager.Models;
 
 namespace MSDSManager.Services;
 
@@ -29,6 +30,7 @@ public sealed class AppSettings
     public int VerificationReminderMonths { get; set; } = 12;
     public string? ReplyTemplate { get; set; }
     public string? DefaultSupplierEmail { get; set; }
+    public List<FolderMoveRecord> LastFolderMoves { get; set; } = [];
 
 
     public static AppSettings Load()
@@ -39,7 +41,9 @@ public sealed class AppSettings
                 return new AppSettings();
 
             var json = File.ReadAllText(AppPaths.SettingsPath);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            settings.LastFolderMoves ??= [];
+            return settings;
         }
         catch
         {

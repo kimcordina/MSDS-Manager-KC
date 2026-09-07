@@ -13,25 +13,87 @@ public sealed class SdsIndexer
         _repository = repository;
     }
 
-    public async Task<int> IndexLibraryAsync(
-        string rootPath,
-        int reviewAfterMonths,
-        IProgress<IndexProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+    public LibraryChangeSummary DetectChanges(string rootPath)
     {
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
             throw new DirectoryNotFoundException("SDS library folder was not found.");
 
-        var files = Directory
-            .EnumerateFiles(rootPath, "*.pdf", SearchOption.AllDirectories)
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var files = ListPdfFiles(rootPath);
+        var existing = _repository.GetAllDocuments()
+            .ToDictionary(d => d.FilePath, StringComparer.OrdinalIgnoreCase);
 
+        var newCount = 0;
+        var changedCount = 0;
+        var unchangedCount = 0;
+
+        foreach (var file in files)
+        {
+            var info = new FileInfo(file);
+            if (!existing.TryGetValue(file, out var doc) || !IsUnchanged(doc, info))
+            {
+                if (existing.ContainsKey(file))
+                    changedCount++;
+                else
+                    newCount++;
+            }
+            else
+            {
+                unchangedCount++;
+            }
+        }
+
+        var missingCount = existing.Keys.Count(path =>
+            !files.Contains(path, StringComparer.OrdinalIgnoreCase) || !File.Exists(path));
+
+        return new LibraryChangeSummary
+        {
+            NewCount = newCount,
+            ChangedCount = changedCount,
+            MissingCount = missingCount,
+            UnchangedCount = unchangedCount
+        };
+    }
+
+    public async Task<IndexResult> IndexLibraryAsync(
+        string rootPath,
+        int reviewAfterMonths,
+        IProgress<IndexProgress>? progress = null,
+        CancellationToken cancellationToken = default,
+        bool forceFull = false)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            throw new DirectoryNotFoundException("SDS library folder was not found.");
+
+        var files = ListPdfFiles(rootPath);
+        var existing = _repository.GetAllDocuments()
+            .ToDictionary(d => d.FilePath, StringComparer.OrdinalIgnoreCase);
+
+        var newFiles = 0;
+        var changedFiles = 0;
+        var unchangedFiles = 0;
         var processed = 0;
+
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             processed++;
+
+            var info = new FileInfo(file);
+            var hadExisting = existing.TryGetValue(file, out var previous);
+            var skipExtract = !forceFull && hadExisting && previous is not null && IsUnchanged(previous, info);
+
+            if (skipExtract)
+            {
+                unchangedFiles++;
+                progress?.Report(new IndexProgress
+                {
+                    Processed = processed,
+                    Total = files.Count,
+                    CurrentFile = file,
+                    Message = $"Unchanged {Path.GetFileName(file)} ({processed}/{files.Count})"
+                });
+                continue;
+            }
 
             progress?.Report(new IndexProgress
             {
@@ -41,7 +103,11 @@ public sealed class SdsIndexer
                 Message = $"Indexing {Path.GetFileName(file)} ({processed}/{files.Count})"
             });
 
-            var info = new FileInfo(file);
+            if (hadExisting)
+                changedFiles++;
+            else
+                newFiles++;
+
             var relative = Path.GetRelativePath(rootPath, file);
             var category = DeriveCategory(rootPath, file);
             var productFromFile = DeriveProductName(info.Name);
@@ -60,48 +126,103 @@ public sealed class SdsIndexer
                 };
             }
 
-            var doc = new SdsDocument
-            {
-                FilePath = file,
-                FileName = info.Name,
-                RelativePath = relative,
-                Category = category,
-                ProductName = string.IsNullOrWhiteSpace(extraction.ProductName)
-                    ? productFromFile
-                    : extraction.ProductName!,
-                ProductNameFromPdf = extraction.ProductName,
-                Version = extraction.Version,
-                RevisionDate = extraction.RevisionDate,
-                IndexedAt = DateTime.UtcNow,
-                FileLastWriteUtc = info.LastWriteTimeUtc,
-                FileSizeBytes = info.Length,
-                ExtractPreview = extraction.ExtractPreview,
-                Status = DocumentStatus.Current
-            };
-
-            if (!extraction.Success || extraction.RevisionDate is null)
-            {
-                doc.Status = DocumentStatus.Incomplete;
-                doc.StatusReason = extraction.Success
-                    ? "Revision date not detected in PDF"
-                    : $"Could not read PDF: {extraction.Error}";
-            }
-
+            var doc = BuildDocument(file, info, relative, category, productFromFile, extraction);
             _repository.UpsertDocument(doc);
         }
 
+        var existingCount = existing.Count;
         _repository.RemoveMissingFiles(files);
+        var remainingCount = _repository.GetAllDocuments().Count;
+        var removed = Math.Max(0, existingCount + newFiles - remainingCount);
+
         RecalculateStatuses(reviewAfterMonths);
         LogVersionChanges();
+
+        var result = new IndexResult
+        {
+            TotalFiles = files.Count,
+            NewFiles = newFiles,
+            ChangedFiles = changedFiles,
+            UnchangedFiles = unchangedFiles,
+            RemovedFiles = removed,
+            ForcedFull = forceFull
+        };
 
         progress?.Report(new IndexProgress
         {
             Processed = files.Count,
             Total = files.Count,
-            Message = $"Indexed {files.Count} PDF(s)."
+            Message = result.Describe()
         });
 
-        return files.Count;
+        return result;
+    }
+
+    internal static SdsDocument BuildDocument(
+        string file,
+        FileInfo info,
+        string relative,
+        string category,
+        string productFromFile,
+        PdfExtractionResult extraction)
+    {
+        var doc = new SdsDocument
+        {
+            FilePath = file,
+            FileName = info.Name,
+            RelativePath = relative,
+            Category = category,
+            ProductName = string.IsNullOrWhiteSpace(extraction.ProductName)
+                ? productFromFile
+                : extraction.ProductName!,
+            ProductNameFromPdf = extraction.ProductName,
+            Version = extraction.Version,
+            RevisionDate = extraction.RevisionDate,
+            IndexedAt = DateTime.UtcNow,
+            FileLastWriteUtc = info.LastWriteTimeUtc,
+            FileSizeBytes = info.Length,
+            ExtractPreview = extraction.ExtractPreview,
+            Status = DocumentStatus.Current
+        };
+
+        ApplyExtractionStatus(doc, extraction);
+        return doc;
+    }
+
+    internal static void ApplyExtractionStatus(SdsDocument doc, PdfExtractionResult extraction)
+    {
+        if (!extraction.Success)
+        {
+            doc.Status = DocumentStatus.Incomplete;
+            doc.StatusReason = $"Could not read PDF: {extraction.Error}";
+            return;
+        }
+
+        var hasDate = extraction.RevisionDate.HasValue;
+        var hasVersion = !string.IsNullOrWhiteSpace(extraction.Version);
+        var hasPdfProduct = !string.IsNullOrWhiteSpace(extraction.ProductName);
+
+        if (!hasDate && !hasVersion && !hasPdfProduct)
+        {
+            doc.Status = DocumentStatus.Incomplete;
+            doc.StatusReason =
+                "No revision date, version, or product name found in the first pages or last page. Open the PDF to confirm.";
+            return;
+        }
+
+        if (!hasDate)
+        {
+            // Product/version was read — do not treat as Incomplete just because the date
+            // lives later in the SDS than we scanned.
+            doc.Status = DocumentStatus.Current;
+            doc.StatusReason = hasVersion
+                ? $"Revision date not found in scanned pages (version {extraction.Version} was read). Confirm if this copy looks current."
+                : "Revision date not found in scanned pages; product name was read from the PDF. Confirm if this copy looks current.";
+            return;
+        }
+
+        doc.Status = DocumentStatus.Current;
+        doc.StatusReason = null;
     }
 
     private void LogVersionChanges()
@@ -163,7 +284,6 @@ public sealed class SdsIndexer
                 if (ordered.Count(d => d.Status != DocumentStatus.Superseded) > 1 &&
                     ReferenceEquals(doc, newest))
                 {
-                    // Multiple current candidates with same/missing dates
                     var peers = ordered.Where(d => !ReferenceEquals(d, newest)).ToList();
                     if (peers.Any(p => p.RevisionDate == doc.RevisionDate))
                     {
@@ -182,8 +302,11 @@ public sealed class SdsIndexer
 
                 if (doc.Status != DocumentStatus.Incomplete)
                 {
+                    // Keep the extractor note when date is missing but other metadata was found
+                    var keepReason = doc.RevisionDate is null && !string.IsNullOrWhiteSpace(doc.StatusReason);
                     doc.Status = DocumentStatus.Current;
-                    doc.StatusReason = null;
+                    if (!keepReason)
+                        doc.StatusReason = null;
                 }
             }
         }
@@ -191,10 +314,25 @@ public sealed class SdsIndexer
         _repository.UpdateStatuses(docs);
     }
 
+    private static List<string> ListPdfFiles(string rootPath) =>
+        Directory
+            .EnumerateFiles(rootPath, "*.pdf", SearchOption.AllDirectories)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    internal static bool IsUnchanged(SdsDocument existing, FileInfo info)
+    {
+        if (existing.FileSizeBytes != info.Length)
+            return false;
+
+        var delta = (existing.FileLastWriteUtc.ToUniversalTime() - info.LastWriteTimeUtc).Duration();
+        return delta <= TimeSpan.FromSeconds(2);
+    }
+
     private static string DeriveCategory(string rootPath, string filePath) =>
         FolderOrganiserService.DeriveCategoryPath(rootPath, filePath);
 
-    private static string DeriveProductName(string fileName)
+    internal static string DeriveProductName(string fileName)
     {
         var name = Path.GetFileNameWithoutExtension(fileName);
         name = name.Replace('_', ' ').Replace('-', ' ');

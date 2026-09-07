@@ -42,6 +42,10 @@ public partial class MatchRowViewModel : ObservableObject
     public string ConfidenceLabel => Suggestion.ConfidenceLabel;
     public string StatusLabel => SelectedDocument?.StatusLabel ?? "Missing";
     public bool NeedsReview => Suggestion.NeedsManualChoice || SelectedDocument is null;
+    public string AliasHint =>
+        Include && SelectedDocument is not null
+            ? $"Will remember “{RequestedTerm}”"
+            : "Tick a file to remember this name";
 
     partial void OnSelectedDocumentChanged(SdsDocument? value)
     {
@@ -51,11 +55,13 @@ public partial class MatchRowViewModel : ObservableObject
             Include = true;
         OnPropertyChanged(nameof(StatusLabel));
         OnPropertyChanged(nameof(NeedsReview));
+        OnPropertyChanged(nameof(AliasHint));
     }
 
     partial void OnIncludeChanged(bool value)
     {
         Suggestion.Include = value && SelectedDocument is not null;
+        OnPropertyChanged(nameof(AliasHint));
     }
 }
 
@@ -79,7 +85,14 @@ public partial class OutlookMatchViewModel : ObservableObject
     private string _pasteText = string.Empty;
 
     [ObservableProperty]
-    private string _statusMessage = "Select the client email in Outlook, then click Find from Outlook.";
+    private string _statusMessage =
+        "Select the client email in Outlook and click Find from Outlook. If that fails, paste the email on the right and click Match pasted text.";
+
+    [ObservableProperty]
+    private string _learnedAliasSummary = "Approved matches are saved as aliases so the next similar request is faster.";
+
+    public string OutlookHint { get; } =
+        "Outlook must be open with a mail message selected (not Calendar). Nothing is sent automatically.";
 
     [ObservableProperty]
     private string _replyTemplate = string.Empty;
@@ -111,7 +124,9 @@ public partial class OutlookMatchViewModel : ObservableObject
             EmailPreview = Truncate(mail.BodyText, 500);
             PasteText = mail.BodyText;
             ApplyMatches(_matcher.MatchFromEmailText(mail.Subject, mail.BodyText));
-            StatusMessage = $"Found {Rows.Count} requested product term(s) from Outlook.";
+            StatusMessage = Rows.Count == 0
+                ? "No product terms found in the selected email. Paste extra wording on the right if the request is buried in a thread."
+                : $"Found {Rows.Count} requested product term(s) from Outlook. Tick/correct matches, then attach or save aliases.";
         }
         catch (Exception ex)
         {
@@ -133,7 +148,27 @@ public partial class OutlookMatchViewModel : ObservableObject
         EmailSubject = string.IsNullOrWhiteSpace(EmailSubject) ? "(pasted request)" : EmailSubject;
         EmailPreview = Truncate(PasteText, 500);
         ApplyMatches(_matcher.MatchFromEmailText(EmailSubject, PasteText));
-        StatusMessage = $"Found {Rows.Count} requested product term(s) from pasted text.";
+        StatusMessage = Rows.Count == 0
+            ? "No product terms found in the pasted text. Try listing product names or codes (e.g. LUX5) one per line."
+            : $"Found {Rows.Count} requested product term(s) from pasted text. Tick/correct matches, then attach or save aliases.";
+    }
+
+    [RelayCommand]
+    private void SaveApprovedAliases()
+    {
+        var learned = LearnApprovedAliases();
+        if (learned.Count == 0)
+        {
+            MessageBox.Show(
+                "Tick at least one matched SDS first. The requested name is then remembered as an alias for that file.",
+                "MSDS Manager KC",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        LearnedAliasSummary = "Saved: " + string.Join("; ", learned);
+        StatusMessage = $"Saved {learned.Count} alias(es). The next similar request should match faster.";
     }
 
     [RelayCommand]
@@ -156,11 +191,9 @@ public partial class OutlookMatchViewModel : ObservableObject
             return;
         }
 
-        // Learn aliases from confirmed corrections
-        foreach (var row in Rows.Where(r => r.Include && r.SelectedDocument is not null))
-        {
-            _repository.AddAlias(row.SelectedDocument!.Id, row.RequestedTerm);
-        }
+        var learned = LearnApprovedAliases();
+        if (learned.Count > 0)
+            LearnedAliasSummary = "Saved: " + string.Join("; ", learned);
 
         _settings.ReplyTemplate = ReplyTemplate;
         _settings.Save();
@@ -173,9 +206,12 @@ public partial class OutlookMatchViewModel : ObservableObject
                 replyAll: false);
 
             _repository.TouchUsed(approved.Select(d => d.Id));
+            var aliasNote = learned.Count == 0
+                ? string.Empty
+                : $"\n\nRemembered {learned.Count} customer name(s) as aliases.";
             StatusMessage = $"Attached {approved.Count} SDS file(s) to Outlook reply. Nothing was sent.";
             MessageBox.Show(
-                $"Attached {approved.Count} SDS file(s) to a new Outlook reply.\n\nNothing was sent — review and send when ready.",
+                $"Attached {approved.Count} SDS file(s) to a new Outlook reply.{aliasNote}\n\nNothing was sent — review and send when ready.",
                 "MSDS Manager KC",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -186,6 +222,29 @@ public partial class OutlookMatchViewModel : ObservableObject
             StatusMessage = ex.Message;
             MessageBox.Show(ex.Message, "Outlook attach failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private List<string> LearnApprovedAliases()
+    {
+        var learned = new List<string>();
+        foreach (var row in Rows.Where(r => r.Include && r.SelectedDocument is not null))
+        {
+            var product = row.SelectedDocument!.ProductName;
+            foreach (var alias in RequestMatcher.AliasVariants(row.RequestedTerm))
+            {
+                _repository.AddAlias(row.SelectedDocument.Id, alias);
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.ManualAliasToSave))
+            {
+                foreach (var alias in RequestMatcher.AliasVariants(row.ManualAliasToSave))
+                    _repository.AddAlias(row.SelectedDocument.Id, alias);
+            }
+
+            learned.Add($"{row.RequestedTerm} → {product}");
+        }
+
+        return learned.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private void ApplyMatches(IReadOnlyList<ProductMatchSuggestion> suggestions)

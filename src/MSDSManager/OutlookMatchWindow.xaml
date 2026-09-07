@@ -25,6 +25,10 @@
                     <TextBlock Text="Software proposes — you approve — Outlook attaches"
                                FontSize="18"
                                FontWeight="Bold"/>
+                    <TextBlock Text="{Binding OutlookHint}"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"/>
                     <TextBlock Text="{Binding EmailSubject}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0"
@@ -34,13 +38,25 @@
                                TextWrapping="Wrap"
                                MaxHeight="60"
                                Margin="0,4,0,0"/>
+                    <TextBlock Text="{Binding LearnedAliasSummary}"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,8,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                    <Button Content="Find from Outlook"
-                            Command="{Binding FindFromOutlookCommand}"/>
-                    <Button Content="Match pasted text"
+                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Find from Outlook"
+                                Command="{Binding FindFromOutlookCommand}"/>
+                        <Button Content="Match pasted text"
+                                Style="{StaticResource SecondaryButton}"
+                                Command="{Binding MatchFromPasteCommand}"/>
+                    </StackPanel>
+                    <Button Content="Save approved aliases"
                             Style="{StaticResource SecondaryButton}"
-                            Command="{Binding MatchFromPasteCommand}"/>
+                            Command="{Binding SaveApprovedAliasesCommand}"
+                            HorizontalAlignment="Right"
+                            Margin="0,8,0,0"
+                            ToolTip="Remember the requested names for the ticked SDS files without attaching yet."/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -108,6 +124,10 @@
                                         Binding="{Binding ConfidenceLabel}"
                                         Width="110"
                                         IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Alias"
+                                        Binding="{Binding AliasHint}"
+                                        Width="160"
+                                        IsReadOnly="True"/>
                 </DataGrid.Columns>
             </DataGrid>
 
@@ -128,15 +148,20 @@
                          Padding="8"/>
                 <DockPanel Grid.Column="1" Margin="12,0,0,0">
                     <TextBlock DockPanel.Dock="Top"
-                               Text="Or paste email text here"
+                               Text="Paste-email fallback (always available)"
                                FontWeight="SemiBold"
+                               Margin="0,0,0,6"/>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="If Outlook is not running, nothing is selected, or the item is a calendar entry, paste the client email here and click Match pasted text."
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedBrush}"
                                Margin="0,0,0,6"/>
                     <TextBox Text="{Binding PasteText, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True"
                              TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto"
                              Padding="8"
-                             ToolTip="Useful if Outlook selection fails, or for testing."/>
+                             ToolTip="Works without Outlook. Paste the request, then match."/>
                 </DockPanel>
             </Grid>
         </Grid>

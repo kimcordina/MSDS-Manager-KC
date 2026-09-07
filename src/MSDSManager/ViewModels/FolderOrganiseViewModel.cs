@@ -56,6 +56,14 @@ public partial class FolderOrganiseViewModel : ObservableObject
     [ObservableProperty]
     private int _suggestionCount;
 
+    [ObservableProperty]
+    private bool _canUndo;
+
+    public string UndoHint =>
+        CanUndo
+            ? $"Undo last approved move ({_settings.LastFolderMoves.Count} file(s))"
+            : "Undo last approved move (none yet)";
+
     public FolderOrganiseViewModel(
         AppSettings settings,
         SdsRepository repository,
@@ -68,6 +76,7 @@ public partial class FolderOrganiseViewModel : ObservableObject
         _indexer = indexer;
         _organiser = organiser;
         _afterChanges = afterChanges;
+        CanUndo = _settings.LastFolderMoves.Count > 0;
     }
 
     [RelayCommand]
@@ -164,6 +173,14 @@ public partial class FolderOrganiseViewModel : ObservableObject
             var result = _organiser.ApplyApprovedMoves(root, approved);
             StatusMessage = $"Moved {result.Moved} file(s). Failed: {result.Failed}.";
 
+            if (result.Moves.Count > 0)
+            {
+                _settings.LastFolderMoves = result.Moves;
+                _settings.Save();
+                CanUndo = true;
+                OnPropertyChanged(nameof(UndoHint));
+            }
+
             if (result.Errors.Count > 0)
             {
                 MessageBox.Show(
@@ -173,14 +190,14 @@ public partial class FolderOrganiseViewModel : ObservableObject
                     MessageBoxImage.Warning);
             }
 
-            // Re-index so DB paths/categories match the new locations
-            await _indexer.IndexLibraryAsync(root, _settings.ReviewAfterMonths);
+            await _indexer.IndexLibraryAsync(root, _settings.ReviewAfterMonths, forceFull: false);
             if (_afterChanges is not null)
                 await _afterChanges();
 
             Scan();
             MessageBox.Show(
-                $"Moved {result.Moved} file(s) and refreshed the library index.",
+                $"Moved {result.Moved} file(s) and refreshed the library index.\n\n" +
+                "Use Undo last move if this was a mistake.",
                 "MSDS Manager KC",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -188,6 +205,77 @@ public partial class FolderOrganiseViewModel : ObservableObject
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Folder organise failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UndoLastMoveAsync()
+    {
+        var root = _settings.LibraryRootPath;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return;
+
+        var last = _settings.LastFolderMoves;
+        if (last.Count == 0)
+        {
+            MessageBox.Show("There is no approved move to undo.", "MSDS Manager KC",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"Move {last.Count} file(s) back to their previous folders?\n\n" +
+            "This only undoes the last approved batch.",
+            "Undo last folder move",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        IsBusy = true;
+        try
+        {
+            var result = _organiser.UndoMoves(last);
+            if (result.Failed == 0)
+            {
+                _settings.LastFolderMoves = [];
+                _settings.Save();
+                CanUndo = false;
+                OnPropertyChanged(nameof(UndoHint));
+            }
+
+            await _indexer.IndexLibraryAsync(root, _settings.ReviewAfterMonths, forceFull: false);
+            if (_afterChanges is not null)
+                await _afterChanges();
+
+            Scan();
+            StatusMessage = $"Undid {result.Moved} move(s). Failed: {result.Failed}.";
+
+            if (result.Errors.Count > 0)
+            {
+                MessageBox.Show(
+                    string.Join(Environment.NewLine, result.Errors.Take(12)),
+                    "Some undo moves failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else
+            {
+                MessageBox.Show(
+                    $"Moved {result.Moved} file(s) back and refreshed the library index.",
+                    "MSDS Manager KC",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Undo failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

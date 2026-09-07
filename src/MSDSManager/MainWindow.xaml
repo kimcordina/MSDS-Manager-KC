@@ -60,7 +60,8 @@
                             Style="{StaticResource SecondaryButton}"
                             Command="{Binding BrowseLibraryCommand}"/>
                     <Button Content="Re-index Library"
-                            Command="{Binding ReindexAsyncCommand}"/>
+                            Command="{Binding ReindexAsyncCommand}"
+                            ToolTip="Indexes new and changed PDFs only. If nothing changed, you can choose a full re-read."/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -209,7 +210,8 @@
                                         <TextBlock Text="{Binding Document.StatusLabel}"
                                                    Foreground="{Binding Document.Status, Converter={StaticResource StatusBrush}}"
                                                    FontWeight="SemiBold"
-                                                   VerticalAlignment="Center"/>
+                                                   VerticalAlignment="Center"
+                                                   ToolTip="{Binding Document.StatusReason}"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
